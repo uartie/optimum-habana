@@ -96,7 +96,7 @@ class Secret:
 def pytest_addoption(parser):
     parser.addoption("--token", action="store", default=None)
     parser.addoption("--rebase", action="store_true", help="rebase baseline references from current run")
-    parser.addoption("--device", action="store", default=None)
+    parser.addoption("--device", "--device-context", action="store", default=None)
 
 
 @pytest.fixture
@@ -104,8 +104,20 @@ def token(request):
     return Secret(request.config.option.token)
 
 
+def pytest_configure(config):
+    name = ""
+    try:
+        import habana_frameworks.torch.hpu as torch_hpu
+
+        name = torch_hpu.get_device_name().strip()
+    finally:
+        config.stash["physical_device"] = "" if not name else name.split()[-1].lower()
+
+
 def pytest_sessionstart(session):
     session.stash["baseline"] = Baseline(session)
+
+    physical_device = session.config.stash["physical_device"]
 
     # User command-line option takes highest priority
     if session.config.option.device is not None:
@@ -115,12 +127,9 @@ def pytest_sessionstart(session):
         device = "gaudi2" if os.environ["GAUDI2_CI"] == "1" else "gaudi1"
     # Try to automatically detect it
     else:
-        import habana_frameworks.torch.hpu as torch_hpu
-
-        name = torch_hpu.get_device_name().strip()
-        if not name:
+        if not physical_device:
             raise RuntimeError("Expected a Gaudi device but did not detect one.")
-        device = name.split()[-1].lower()
+        device = physical_device
 
     # torch_hpu.get_device_name() returns GAUDI for G1
     if "gaudi" == device:
@@ -130,8 +139,11 @@ def pytest_sessionstart(session):
     oh_testutils.OH_DEVICE_CONTEXT = device
 
 
-def pytest_report_header():
-    return [f"device context: {oh_testutils.OH_DEVICE_CONTEXT}"]
+def pytest_report_header(config):
+    return [
+        f"device physical: {config.stash['physical_device'] or '??'}",
+        f"device context : {oh_testutils.OH_DEVICE_CONTEXT}",
+    ]
 
 
 def pytest_sessionfinish(session):
