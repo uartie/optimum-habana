@@ -202,6 +202,7 @@ def check_synapse_version():
     # Change the logging format
     logging.enable_default_handler()
     logging.enable_explicit_format()
+    logger.info("CHECKING SYNAPSE VERSION")
 
     # Check the version of habana_frameworks
     habana_frameworks_version_number = get_habana_frameworks_version()
